@@ -1,4 +1,4 @@
-# VerneMQ Demo Plugin
+# Mainflux VerneMQ Auth Plugin
 
 This plugin demonstrates how you can develop an Authentication/Authorization plugin for VerneMQ. The important files are:
 

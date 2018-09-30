@@ -1,4 +1,4 @@
--module(vernemq_demo_plugin_sup).
+-module(mfx_auth_sup).
 
 -behaviour(supervisor).
 

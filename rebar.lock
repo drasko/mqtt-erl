@@ -1,0 +1,16 @@
+{"1.1.0",
+[{<<"jsx">>,{pkg,<<"jsx">>,<<"2.8.0">>},1},
+ {<<"nats_msg">>,{pkg,<<"nats_msg">>,<<"0.4.1">>},1},
+ {<<"teacup">>,{pkg,<<"teacup">>,<<"0.3.4">>},1},
+ {<<"teacup_nats">>,{pkg,<<"teacup_nats">>,<<"0.4.1">>},0},
+ {<<"vernemq_dev">>,
+  {git,"git://github.com/erlio/vernemq_dev.git",
+       {ref,"01317f9271c1acb2fabda9b31b199029e87af1da"}},
+  0}]}.
+[
+{pkg_hash,[
+ {<<"jsx">>, <<"749BEC6D205C694AE1786D62CEA6CC45A390437E24835FD16D12D74F07097727">>},
+ {<<"nats_msg">>, <<"3058CE6E09C3EFF1297CE5599E77D8FB9E04C9736962E4FACE67CA9EB3EB744D">>},
+ {<<"teacup">>, <<"7D66AC0663AE0CEFF1552907E2EBD3E0A5B716C435765B57C589193D4C59DE4D">>},
+ {<<"teacup_nats">>, <<"635A02473B0BE9079C83DFB22FECA502C61706D35A58D978427CA4577B5E08F8">>}]}
+].

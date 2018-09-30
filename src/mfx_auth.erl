@@ -1,4 +1,4 @@
--module(vernemq_demo_plugin).
+-module(mfx_auth).
 
 -behaviour(auth_on_register_hook).
 -behaviour(auth_on_subscribe_hook).
@@ -7,6 +7,8 @@
 -export([auth_on_register/5,
          auth_on_publish/6,
          auth_on_subscribe/3]).
+
+-include("message.hrl").
 
 %% This file demonstrates the hooks you typically want to use
 %% if your plugin deals with Authentication or Authorization.
@@ -20,7 +22,18 @@
 %%
 %% IMPORTANT:
 %%  these hook functions run in the session context
-%%
+
+
+publish_to_nats(Subject, Message) ->
+    error_logger:info_msg("publish_to_nats: ~p ~p", [Subject, Message]),
+    % Connect to the NATS server
+    % We set the buffer_size, so messages will be collected on the client side
+    % until the connection is OK to use
+    {ok, Conn} = nats:connect(<<"localhost">>, 4222, #{buffer_size => 10}),
+    % Publish some message
+    nats:pub(Conn, Subject, #{payload => Message}).
+
+
 auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberId, UserName, Password, CleanSession) ->
     error_logger:info_msg("auth_on_register: ~p ~p ~p ~p ~p", [Peer, SubscriberId, UserName, Password, CleanSession]),
     %% do whatever you like with the params, all that matters
@@ -53,6 +66,17 @@ auth_on_publish(UserName, {_MountPoint, _ClientId} = SubscriberId, QoS, Topic, P
     %% 5. return {error, whatever} -> auth chain is stopped, and message is silently dropped (unless it is a Last Will message)
     %%
     %% we return 'ok'
+
+    % Topic is list of binaries, ex: [<<"channels">>,<<"1">>,<<"messages">>]
+    [_, ChannelId, _] = Topic,
+    Subject = [<<"channel.">>, ChannelId], % binary concatenation
+    RawMessage = #'RawMessage'{
+        'Channel' = binary_to_integer(ChannelId),
+        'Publisher' = 123,
+        'Protocol' = "mqtt",
+        'Payload' = Payload
+    },
+    publish_to_nats(Subject, message:encode_msg(RawMessage)),
     ok.
 
 auth_on_subscribe(UserName, ClientId, [{_Topic, _QoS}|_] = Topics) ->
