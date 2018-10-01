@@ -26,12 +26,8 @@
 
 publish_to_nats(Subject, Message) ->
     error_logger:info_msg("publish_to_nats: ~p ~p", [Subject, Message]),
-    % Connect to the NATS server
-    % We set the buffer_size, so messages will be collected on the client side
-    % until the connection is OK to use
-    {ok, Conn} = nats:connect(<<"localhost">>, 4222, #{buffer_size => 10}),
-    % Publish some message
-    nats:pub(Conn, Subject, #{payload => Message}).
+    % Publish the message
+    nats:pub(ets:lookup(mfx_cfg, nats_conn), Subject, #{payload => Message}).
 
 
 auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberId, UserName, Password, CleanSession) ->
