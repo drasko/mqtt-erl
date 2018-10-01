@@ -26,11 +26,11 @@ start(_StartType, _StartArgs) ->
 
     {ok, NatsConn} = nats:connect(<<"localhost">>, 4222, #{buffer_size => 10}),
 
-    ets:insert(mfx_cfg,
+    ets:insert(mfx_cfg, [
         {nats_url, NatsUrl},
         {things_url, ThingsUrl},
         {nats_conn, NatsConn}
-    ),
+    ]),
 
     % Start the process
     mfx_auth_sup:start_link().

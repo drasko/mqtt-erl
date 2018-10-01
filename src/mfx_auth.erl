@@ -27,7 +27,8 @@
 publish_to_nats(Subject, Message) ->
     error_logger:info_msg("publish_to_nats: ~p ~p", [Subject, Message]),
     % Publish the message
-    nats:pub(ets:lookup(mfx_cfg, nats_conn), Subject, #{payload => Message}).
+    [{nats_conn, Conn}] = ets:lookup(mfx_cfg, nats_conn),
+    nats:pub(Conn, Subject, #{payload => Message}).
 
 
 auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberId, UserName, Password, CleanSession) ->
