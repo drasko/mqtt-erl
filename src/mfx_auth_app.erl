@@ -24,7 +24,8 @@ start(_StartType, _StartArgs) ->
         ThingsEnv -> ThingsEnv
     end,
 
-    {ok, NatsConn} = nats:connect(<<"localhost">>, 4222, #{buffer_size => 10}),
+    {ok, {_, _, NatsHost, NatsPort, _, _}} = http_uri:parse(NatsUrl),
+    {ok, NatsConn} = nats:connect(list_to_binary(NatsHost), NatsPort, #{buffer_size => 10}),
 
     ets:insert(mfx_cfg, [
         {nats_url, NatsUrl},
