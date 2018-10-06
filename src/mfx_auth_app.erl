@@ -27,10 +27,13 @@ start(_StartType, _StartArgs) ->
     {ok, {_, _, NatsHost, NatsPort, _, _}} = http_uri:parse(NatsUrl),
     {ok, NatsConn} = nats:connect(list_to_binary(NatsHost), NatsPort, #{buffer_size => 10}),
 
+    {ok, GrpcConn} = grpc_client:connect(tcp, ThingsUrl, 10000),
+
     ets:insert(mfx_cfg, [
         {nats_url, NatsUrl},
         {things_url, ThingsUrl},
-        {nats_conn, NatsConn}
+        {nats_conn, NatsConn},
+        {grpc_conn, GrpcConn}
     ]),
 
     % Start the process

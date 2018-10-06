@@ -30,6 +30,47 @@ publish_to_nats(Subject, Message) ->
     [{nats_conn, Conn}] = ets:lookup(mfx_cfg, nats_conn),
     nats:pub(Conn, Subject, #{payload => Message}).
 
+auth_thing(Password) ->
+    error_logger:info_msg("auth_thing: ~p", [Password]),
+    [{grpc_conn, Conn}] = ets:lookup(mfx_cfg, grpc_conn),
+    Token = #{value => binary_to_list(Password)},
+    {ok, Result} = internal_client:'IdentifyThing'(Conn, Token, []),
+
+    #{
+        grpc_status := 0,
+        headers := #{<<":status">> := <<"200">>},
+        http_status := HttpStatus,
+        result :=
+            #{value := ThingId},
+        status_message := <<>>,
+        trailers := #{<<"grpc-status">> := <<"0">>}
+    } = Result,
+
+    case HttpStatus of
+        200 -> {ok, ThingId};
+         _ -> {error, HttpStatus}
+    end.
+auth_thing(UserName, ChannelId) ->
+    error_logger:info_msg("auth_thing: ~p ~p", [UserName, ChannelId]),
+    Password = get(UserName),
+    [{grpc_conn, Conn}] = ets:lookup(mfx_cfg, grpc_conn),
+    AccessReq = #{token => binary_to_list(Password), chanID => ChannelId},
+    {ok, Result} = internal_client:'CanAccess'(Conn, AccessReq, []),
+    
+    #{
+        grpc_status := 0,
+        headers := #{<<":status">> := <<"200">>},
+        http_status := HttpStatus,
+        result :=
+            #{value := ThingId},
+        status_message := <<>>,
+        trailers := #{<<"grpc-status">> := <<"0">>}
+    } = Result,
+
+    case HttpStatus of
+        200 -> {ok, ThingId};
+         _ -> {error, HttpStatus}
+    end.
 
 auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberId, UserName, Password, CleanSession) ->
     error_logger:info_msg("auth_on_register: ~p ~p ~p ~p ~p", [Peer, SubscriberId, UserName, Password, CleanSession]),
@@ -44,8 +85,12 @@ auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberI
     %% 4. return {error, invalid_credentials} -> CONNACK_CREDENTIALS is sent
     %% 5. return {error, whatever} -> CONNACK_AUTH is sent
 
-    %% we return 'ok'
-    ok.
+    case auth_thing(Password) of
+        {ok, _} ->
+            % Save Username:Password mapping in process dictionary
+            put(UserName, Password);
+        _ -> error
+    end.
 
 auth_on_publish(UserName, {_MountPoint, _ClientId} = SubscriberId, QoS, Topic, Payload, IsRetain) ->
     error_logger:info_msg("auth_on_publish: ~p ~p ~p ~p ~p ~p", [UserName, SubscriberId, QoS, Topic, Payload, IsRetain]),
@@ -62,18 +107,21 @@ auth_on_publish(UserName, {_MountPoint, _ClientId} = SubscriberId, QoS, Topic, P
     %%     - {retain, NewRetainFlag::boolean}
     %% 5. return {error, whatever} -> auth chain is stopped, and message is silently dropped (unless it is a Last Will message)
     %%
-    %% we return 'ok'
+    [_, ChannelIdBin, _] = Topic,
+    ChannelId = binary_to_integer(ChannelIdBin),
+    {ok, PublisherId} = auth_thing(UserName, ChannelId),
 
     % Topic is list of binaries, ex: [<<"channels">>,<<"1">>,<<"messages">>]
-    [_, ChannelId, _] = Topic,
     Subject = [<<"channel.">>, ChannelId], % binary concatenation
     RawMessage = #'RawMessage'{
-        'Channel' = binary_to_integer(ChannelId),
-        'Publisher' = 123,
+        'Channel' = ChannelId,
+        'Publisher' = PublisherId,
         'Protocol' = "mqtt",
         'Payload' = Payload
     },
     publish_to_nats(Subject, message:encode_msg(RawMessage)),
+
+    %% we return 'ok'
     ok.
 
 auth_on_subscribe(UserName, ClientId, [{_Topic, _QoS}|_] = Topics) ->
@@ -85,5 +133,9 @@ auth_on_subscribe(UserName, ClientId, [{_Topic, _QoS}|_] = Topics) ->
     %% 2. return 'next' -> leave it to other plugins to decide
     %% 3. return {error, whatever} -> auth chain is stopped, and no SUBACK is sent
 
-    %% we return 'ok'
-    ok.
+    [_, ChannelIdBin, _] = _Topic,
+    ChannelId = binary_to_integer(ChannelIdBin),
+    case auth_thing(UserName, ChannelId) of
+        {ok, _} -> ok;
+        _ -> error
+    end.
