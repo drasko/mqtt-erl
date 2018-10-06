@@ -30,46 +30,57 @@ publish_to_nats(Subject, Message) ->
     [{nats_conn, Conn}] = ets:lookup(mfx_cfg, nats_conn),
     nats:pub(Conn, Subject, #{payload => Message}).
 
+call_grpc(Method, Payload) ->
+    [{grpc_conn, Conn}] = ets:lookup(mfx_cfg, grpc_conn),
+    {Status, Result} = case Method of
+        identify ->
+            internal_client:'IdentifyThing'(Conn, Payload, []);
+        can_access ->
+            internal_client:'CanAccess'(Conn, Payload, []);
+        _ -> {error, wrong_method}
+    end,
+
+    error_logger:info_msg("HERE 1: ~p", [Result]),
+
+    case Status of
+        ok ->
+            #{
+                grpc_status := 0,
+                headers := #{<<":status">> := <<"200">>},
+                http_status := HttpStatus,
+                result :=
+                    #{value := ThingId},
+                status_message := <<>>,
+                trailers := #{<<"grpc-status">> := <<"0">>}
+            } = Result,
+
+            error_logger:info_msg("HERE 1: ~p ~p", [HttpStatus, ThingId]),
+            case HttpStatus of
+                200 ->
+                    error_logger:info_msg("HERE 2"),
+                    {ok, ThingId};
+                _ ->
+                    error_logger:info_msg("HERE 3"),
+                    {error, HttpStatus}
+            end;
+        _ ->
+            {error, Status}
+    end.
+
+auth_thing(undefined) ->
+    {error, undefined};
 auth_thing(Password) ->
     error_logger:info_msg("auth_thing: ~p", [Password]),
-    [{grpc_conn, Conn}] = ets:lookup(mfx_cfg, grpc_conn),
     Token = #{value => binary_to_list(Password)},
-    {ok, Result} = internal_client:'IdentifyThing'(Conn, Token, []),
-
-    #{
-        grpc_status := 0,
-        headers := #{<<":status">> := <<"200">>},
-        http_status := HttpStatus,
-        result :=
-            #{value := ThingId},
-        status_message := <<>>,
-        trailers := #{<<"grpc-status">> := <<"0">>}
-    } = Result,
-
-    case HttpStatus of
-        200 -> {ok, ThingId};
-         _ -> {error, HttpStatus}
-    end.
+    call_grpc(identify, Token).
 auth_thing(UserName, ChannelId) ->
     error_logger:info_msg("auth_thing: ~p ~p", [UserName, ChannelId]),
     Password = get(UserName),
-    [{grpc_conn, Conn}] = ets:lookup(mfx_cfg, grpc_conn),
-    AccessReq = #{token => binary_to_list(Password), chanID => ChannelId},
-    {ok, Result} = internal_client:'CanAccess'(Conn, AccessReq, []),
-    
-    #{
-        grpc_status := 0,
-        headers := #{<<":status">> := <<"200">>},
-        http_status := HttpStatus,
-        result :=
-            #{value := ThingId},
-        status_message := <<>>,
-        trailers := #{<<"grpc-status">> := <<"0">>}
-    } = Result,
-
-    case HttpStatus of
-        200 -> {ok, ThingId};
-         _ -> {error, HttpStatus}
+    case Password of
+        undefined -> {error, undefined};
+        _ ->
+            AccessReq = #{token => binary_to_list(Password), chanID => ChannelId},
+            call_grpc(identify, AccessReq)
     end.
 
 auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberId, UserName, Password, CleanSession) ->
@@ -87,8 +98,10 @@ auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberI
 
     case auth_thing(Password) of
         {ok, _} ->
+            error_logger:info_msg("HERE 4: ~p ~p", [UserName, Password]),
             % Save Username:Password mapping in process dictionary
-            put(UserName, Password);
+            put(UserName, Password),
+            ok;
         _ -> error
     end.
 
@@ -109,20 +122,22 @@ auth_on_publish(UserName, {_MountPoint, _ClientId} = SubscriberId, QoS, Topic, P
     %%
     [_, ChannelIdBin, _] = Topic,
     ChannelId = binary_to_integer(ChannelIdBin),
-    {ok, PublisherId} = auth_thing(UserName, ChannelId),
+    case auth_thing(UserName, ChannelId) of
+        {ok, PublisherId} ->
+            % Topic is list of binaries, ex: [<<"channels">>,<<"1">>,<<"messages">>]
+            Subject = [<<"channel.">>, ChannelId], % binary concatenation
+            RawMessage = #'RawMessage'{
+                'Channel' = ChannelId,
+                'Publisher' = PublisherId,
+                'Protocol' = "mqtt",
+                'Payload' = Payload
+            },
+            publish_to_nats(Subject, message:encode_msg(RawMessage)),
 
-    % Topic is list of binaries, ex: [<<"channels">>,<<"1">>,<<"messages">>]
-    Subject = [<<"channel.">>, ChannelId], % binary concatenation
-    RawMessage = #'RawMessage'{
-        'Channel' = ChannelId,
-        'Publisher' = PublisherId,
-        'Protocol' = "mqtt",
-        'Payload' = Payload
-    },
-    publish_to_nats(Subject, message:encode_msg(RawMessage)),
-
-    %% we return 'ok'
-    ok.
+            %% we return 'ok'
+            ok;
+        _ -> error
+    end.
 
 auth_on_subscribe(UserName, ClientId, [{_Topic, _QoS}|_] = Topics) ->
     error_logger:info_msg("auth_on_subscribe: ~p ~p ~p", [UserName, ClientId, Topics]),

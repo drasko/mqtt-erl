@@ -6,7 +6,9 @@
   {applications, [
                   kernel,
                   stdlib,
-                  teacup
+                  teacup,
+                  gpb,
+                  grpc_client
                  ]},
   {mod, { mfx_auth_app, []}},
   {env, [
