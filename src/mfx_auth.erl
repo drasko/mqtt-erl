@@ -77,7 +77,7 @@ auth_thing(UserName, ChannelId) ->
             {error, undefined};
         _ ->
             AccessReq = #{token => binary_to_list(Password), chanID => ChannelId},
-            call_grpc(identify, AccessReq)
+            call_grpc(can_access, AccessReq)
     end.
 
 auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberId, UserName, Password, CleanSession) ->
