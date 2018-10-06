@@ -37,10 +37,9 @@ call_grpc(Method, Payload) ->
             internal_client:'IdentifyThing'(Conn, Payload, []);
         can_access ->
             internal_client:'CanAccess'(Conn, Payload, []);
-        _ -> {error, wrong_method}
+        _ ->
+            {error, wrong_method}
     end,
-
-    error_logger:info_msg("HERE 1: ~p", [Result]),
 
     case Status of
         ok ->
@@ -54,13 +53,10 @@ call_grpc(Method, Payload) ->
                 trailers := #{<<"grpc-status">> := <<"0">>}
             } = Result,
 
-            error_logger:info_msg("HERE 1: ~p ~p", [HttpStatus, ThingId]),
             case HttpStatus of
                 200 ->
-                    error_logger:info_msg("HERE 2"),
                     {ok, ThingId};
                 _ ->
-                    error_logger:info_msg("HERE 3"),
                     {error, HttpStatus}
             end;
         _ ->
@@ -77,7 +73,8 @@ auth_thing(UserName, ChannelId) ->
     error_logger:info_msg("auth_thing: ~p ~p", [UserName, ChannelId]),
     Password = get(UserName),
     case Password of
-        undefined -> {error, undefined};
+        undefined ->
+            {error, undefined};
         _ ->
             AccessReq = #{token => binary_to_list(Password), chanID => ChannelId},
             call_grpc(identify, AccessReq)
@@ -98,11 +95,11 @@ auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberI
 
     case auth_thing(Password) of
         {ok, _} ->
-            error_logger:info_msg("HERE 4: ~p ~p", [UserName, Password]),
             % Save Username:Password mapping in process dictionary
             put(UserName, Password),
             ok;
-        _ -> error
+        _ ->
+            error
     end.
 
 auth_on_publish(UserName, {_MountPoint, _ClientId} = SubscriberId, QoS, Topic, Payload, IsRetain) ->
@@ -132,11 +129,13 @@ auth_on_publish(UserName, {_MountPoint, _ClientId} = SubscriberId, QoS, Topic, P
                 'Protocol' = "mqtt",
                 'Payload' = Payload
             },
+
             publish_to_nats(Subject, message:encode_msg(RawMessage)),
 
             %% we return 'ok'
             ok;
-        _ -> error
+        _ ->
+            error
     end.
 
 auth_on_subscribe(UserName, ClientId, [{_Topic, _QoS}|_] = Topics) ->
