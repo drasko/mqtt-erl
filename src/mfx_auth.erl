@@ -23,52 +23,12 @@
 %% IMPORTANT:
 %%  these hook functions run in the session context
 
-
-publish_to_nats(Subject, Message) ->
-    error_logger:info_msg("publish_to_nats: ~p ~p", [Subject, Message]),
-    % Publish the message
-    [{nats_conn, Conn}] = ets:lookup(mfx_cfg, nats_conn),
-    nats:pub(Conn, Subject, #{payload => Message}).
-
-call_grpc(Method, Payload) ->
-    [{grpc_conn, Conn}] = ets:lookup(mfx_cfg, grpc_conn),
-    {Status, Result} = case Method of
-        identify ->
-            internal_client:'IdentifyThing'(Conn, Payload, []);
-        can_access ->
-            internal_client:'CanAccess'(Conn, Payload, []);
-        _ ->
-            {error, wrong_method}
-    end,
-
-    case Status of
-        ok ->
-            #{
-                grpc_status := 0,
-                headers := #{<<":status">> := <<"200">>},
-                http_status := HttpStatus,
-                result :=
-                    #{value := ThingId},
-                status_message := <<>>,
-                trailers := #{<<"grpc-status">> := <<"0">>}
-            } = Result,
-
-            case HttpStatus of
-                200 ->
-                    {ok, ThingId};
-                _ ->
-                    {error, HttpStatus}
-            end;
-        _ ->
-            {error, Status}
-    end.
-
 auth_thing(undefined) ->
     {error, undefined};
 auth_thing(Password) ->
     error_logger:info_msg("auth_thing: ~p", [Password]),
     Token = #{value => binary_to_list(Password)},
-    call_grpc(identify, Token).
+    mfx_grpc:send(identify, Token).
 auth_thing(UserName, ChannelId) ->
     error_logger:info_msg("auth_thing: ~p ~p", [UserName, ChannelId]),
     Password = get(UserName),
@@ -77,7 +37,7 @@ auth_thing(UserName, ChannelId) ->
             {error, undefined};
         _ ->
             AccessReq = #{token => binary_to_list(Password), chanID => ChannelId},
-            call_grpc(can_access, AccessReq)
+            mfx_grpc:send(can_access, AccessReq)
     end.
 
 auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberId, UserName, Password, CleanSession) ->
@@ -95,6 +55,7 @@ auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberI
 
     case auth_thing(Password) of
         {ok, _} ->
+            error_logger:info_msg("HERE ~p ~p", [UserName, Password]),
             % Save Username:Password mapping in process dictionary
             put(UserName, Password),
             ok;
@@ -130,7 +91,7 @@ auth_on_publish(UserName, {_MountPoint, _ClientId} = SubscriberId, QoS, Topic, P
                 'Payload' = Payload
             },
 
-            publish_to_nats(Subject, message:encode_msg(RawMessage)),
+            mfx_nats:publish(Subject, message:encode_msg(RawMessage)),
 
             %% we return 'ok'
             ok;
