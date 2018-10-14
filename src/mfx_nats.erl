@@ -29,14 +29,16 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 publish(Subject, Message) ->
-    gen_server:call(?MODULE, {publish, Subject, Message}).
+    gen_server:cast(?MODULE, {publish, Subject, Message}).
 
-handle_call({publish, Subject, Message}, _From, State) ->
+handle_call(Name, _From, _State) ->
+    Reply = lists:flatten(io_lib:format("hello ~s from mfx_nats", [Name])),
+    {reply, Reply, _State}.
+
+handle_cast({publish, Subject, Message}, _State) ->
     [{nats_conn, Conn}] = ets:lookup(mfx_cfg, nats_conn),
-    nats:pub(Conn, Subject, #{payload => Message}).
-
-handle_cast(_Request, State) ->
-    {noreply, State}.
+    NewState = nats:pub(Conn, Subject, #{payload => Message}),
+    {noreply, NewState}.
 
 handle_info(_Info, State) ->
     {noreply, State}.

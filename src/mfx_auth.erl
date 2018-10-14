@@ -55,7 +55,6 @@ auth_on_register({_IpAddr, _Port} = Peer, {_MountPoint, _ClientId} = SubscriberI
 
     case auth_thing(Password) of
         {ok, _} ->
-            error_logger:info_msg("HERE ~p ~p", [UserName, Password]),
             % Save Username:Password mapping in process dictionary
             put(UserName, Password),
             ok;

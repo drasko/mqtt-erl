@@ -31,7 +31,7 @@ start_link() ->
 send(Method, Message) ->
     gen_server:call(?MODULE, {send, Method, Message}).
 
-handle_call({send, Method, Message}, _From, State) ->
+handle_call({send, Method, Message}, _From, _State) ->
     [{grpc_conn, Conn}] = ets:lookup(mfx_cfg, grpc_conn),
     {Status, Result} = case Method of
         identify ->
@@ -56,12 +56,12 @@ handle_call({send, Method, Message}, _From, State) ->
 
             case HttpStatus of
                 200 ->
-                    {ok, ThingId};
+                    {reply, {ok, ThingId}, ok};
                 _ ->
-                    {error, HttpStatus}
+                    {reply, {error, HttpStatus}, error}
             end;
         _ ->
-            {error, Status}
+            {reply, {error, Status}, error}
     end.
 
 handle_cast(_Request, State) ->
